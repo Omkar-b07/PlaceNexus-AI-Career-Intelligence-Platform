@@ -114,7 +114,9 @@ function derivePassword(password, salt) {
   });
 }
 
-async function createPasswordHash(password) {
+// Shared by account creation and the local development-only TPO reset script.
+// Keep this as the single password-hashing implementation for the application.
+export async function createPasswordHash(password) {
   const salt = randomBytes(16).toString('base64');
   const derivedKey = await derivePassword(password, salt);
   return `${salt}:${derivedKey.toString('base64')}`;

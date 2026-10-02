@@ -6,6 +6,7 @@
   "scripts": {
     "server": "node --env-file-if-exists=.env src/server.js",
     "server:dev": "node --env-file-if-exists=.env --watch src/server.js",
+    "reset:tpo": "node --env-file-if-exists=.env scripts/resetTpoPassword.js",
     "test": "node --test test/*.test.js",
     "test:eligibility": "node --test test/eligibilityService.test.js"
   },
