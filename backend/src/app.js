@@ -8,6 +8,7 @@ import placementJobRoutes from './routes/placementJobRoutes.js';
 import applicationRoutes from './routes/applicationRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import authRoutes from './routes/authRoutes.js';
+import dsaRoutes from './routes/dsaRoutes.js';
 import tpoRoutes from './routes/tpoRoutes.js';
 import { analyzeJobDescription } from './controllers/jobController.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
@@ -35,6 +36,7 @@ app.use('/profile', requireAuth, profileRoutes);
 app.use('/jobs', requireAuth, placementJobRoutes);
 app.use('/applications', requireAuth, applicationRoutes);
 app.use('/notifications', requireAuth, notificationRoutes);
+app.use('/api/dsa', requireAuth, dsaRoutes);
 app.use('/tpo', requireAuth, requireAdmin, tpoRoutes);
 
 app.use(notFoundHandler);

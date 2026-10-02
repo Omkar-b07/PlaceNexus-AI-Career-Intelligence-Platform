@@ -268,3 +268,12 @@ export function markNotificationRead(notificationId: string) {
 export function markAllNotificationsRead() {
   return request<{ updated: number }>('/notifications/read-all', { method: 'PUT' })
 }
+
+export type DsaProblem = { id: string; title: string; difficulty: string; topics: string[]; url: string | null; status: 'solved' | 'unsolved' }
+type DsaProblemResponse = { problems: DsaProblem[]; pagination: { page: number; limit: number; total: number } }
+export type DsaDashboard = { totalQuestions: number; solved: number; completionPercentage: number; currentStreak: number; longestStreak: number; activity: { date: string; solvedCount: number }[]; difficultyCounts: Record<string, number> }
+export function getDsaProblems(filters: { search?: string; difficulty?: string; topic?: string; status?: 'all' | 'solved' | 'unsolved'; page?: number; limit?: number }) { const params = new URLSearchParams(); Object.entries(filters).forEach(([key, value]) => { if (value !== undefined && value !== '') params.set(key, String(value)) }); return request<DsaProblemResponse>(`/api/dsa/problems?${params.toString()}`) }
+export function getDsaTopics() { return request<{ items: string[] }>('/api/dsa/topics').then((result) => result.items || []) }
+export function getDsaDifficulties() { return request<{ items: string[] }>('/api/dsa/difficulties').then((result) => result.items || []) }
+export function getDsaDashboard() { return request<DsaDashboard>('/api/dsa/dashboard') }
+export function updateDsaProblemStatus(problemId: string, status: 'solved' | 'unsolved') { return request<{ dashboard: DsaDashboard }>(`/api/dsa/problems/${encodeURIComponent(problemId)}/status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) }) }
