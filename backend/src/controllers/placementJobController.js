@@ -1,8 +1,10 @@
 import { evaluateEligibility } from '../services/eligibilityService.js';
-import { buildDriveAnalytics } from '../services/driveAnalyticsService.js';
+import { buildDriveAnalytics, normalizeAnalysisSource } from '../services/driveAnalyticsService.js';
+import { analyzeJobDescription } from '../services/jdAnalysisService.js';
 import { archiveCampusJob, createCampusJob, findJob, jobSourceTypes, listCampusJobsForManagement, listOnCampusJobs, setCampusJobStatus, updateCampusJob } from '../services/jobService.js';
 import { listOffCampusJobs } from '../services/offCampusJobService.js';
-import { getStudentProfile, listActiveStudentProfiles } from '../services/profileService.js';
+import { getStudentProfile, listActiveStudentProfiles, listActiveStudentProfilesForResumeAnalytics } from '../services/profileService.js';
+import { ensureResumeAnalyses } from '../services/resumeAnalysisService.js';
 import { listApplicationsForCampusJob, listCampusApplicationStatuses, updateCampusApplicationStatus } from '../services/applicationService.js';
 
 function notFound() {
@@ -50,6 +52,12 @@ export async function listManagedCampusJobs(_req, res, next) {
 export async function createCampusPlacementJob(req, res, next) {
   try {
     return res.status(201).json({ success: true, data: await createCampusJob(req.body, req.user.id) });
+  } catch (error) { return next(error); }
+}
+
+export async function analyzeCampusJobDescription(req, res, next) {
+  try {
+    return res.status(200).json({ success: true, data: await analyzeJobDescription(req.body?.jobDescription) });
   } catch (error) { return next(error); }
 }
 
@@ -121,10 +129,16 @@ export async function getCampusDriveAnalytics(req, res, next) {
   try {
     const job = await findJob(req.params.jobId);
     if (!job || job.sourceType !== jobSourceTypes.ON_CAMPUS) throw notFound();
-    const [students, applications] = await Promise.all([
-      listActiveStudentProfiles(),
+    const analysisSource = normalizeAnalysisSource(req.query?.analysisSource);
+    const [listedStudents, applications] = await Promise.all([
+      analysisSource === 'resume' ? listActiveStudentProfilesForResumeAnalytics() : listActiveStudentProfiles(),
       listCampusApplicationStatuses(job.id)
     ]);
-    return res.status(200).json({ success: true, data: buildDriveAnalytics(job, students, applications) });
+    // JD analysis is the required target. Do not spend Gemini calls on resume
+    // extraction until a reviewed JD is available for deterministic matching.
+    const students = analysisSource === 'resume' && job.jdAnalysisStatus === 'READY' && job.jdAnalysis
+      ? await ensureResumeAnalyses(listedStudents, { concurrency: 2 })
+      : listedStudents;
+    return res.status(200).json({ success: true, data: buildDriveAnalytics(job, students, applications, { analysisSource }) });
   } catch (error) { return next(error); }
 }

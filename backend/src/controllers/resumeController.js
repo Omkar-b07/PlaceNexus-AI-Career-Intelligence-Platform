@@ -29,7 +29,13 @@ export function uploadResumeFile(req, res, next) {
       data: {
         resume
       }
-    }); }).catch(next).finally(() => fs.unlink(req.file.path).catch(() => {}));
+    }); }).catch(async (error) => {
+      // A failed parse must not leave an inaccessible file behind. Successful
+      // uploads remain at their generated path, which is persisted with the
+      // same canonical resume metadata for safe future recovery.
+      await fs.unlink(req.file.path).catch(() => {});
+      return next(error);
+    });
   } catch (error) {
     return next(error);
   }

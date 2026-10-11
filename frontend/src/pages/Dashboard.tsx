@@ -156,13 +156,13 @@ function SkillList({
 function BrandIdentity() {
   return (
     <>
-      <span className="brand-mark" aria-label="PlaceNexus">
+      <span className="brand-mark" aria-label="PlaceX">
         <span className="brand-mark-p">P</span>
-        <span className="brand-mark-n">N</span>
+        <span className="brand-mark-n">X</span>
       </span>
       <span>
         <span className="brand-name">
-          PlaceNexus <i>AI</i>
+          PlaceX
         </span>
         <span className="brand-subtitle">
           Career intelligence, made personal
@@ -1159,7 +1159,7 @@ function StudentDashboard({
             )}
           </main>
           <footer>
-            PlaceNexus AI <span>•</span> Built for a sharper career move
+            PlaceX <span>•</span> Built for a sharper career move
           </footer>
         </div>
       </div>

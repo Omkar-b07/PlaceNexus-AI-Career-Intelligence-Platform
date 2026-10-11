@@ -8,7 +8,7 @@ try {
   const server = app.listen(port);
 
   server.once('listening', () => {
-    console.log(`PlaceNexus API is listening on http://localhost:${port}`);
+    console.log(`PlaceX API is listening on http://localhost:${port}`);
     void warmGoogleIdentityService();
   });
 
@@ -16,7 +16,7 @@ try {
     if (error?.code === 'EADDRINUSE') {
       console.error(`Port ${port} is already in use.`);
     } else {
-      console.error(`Unable to start PlaceNexus API: ${error.message}`);
+      console.error(`Unable to start PlaceX API: ${error.message}`);
     }
     process.exitCode = 1;
   });

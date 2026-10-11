@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { getJobsCollection } from './database.js';
+import { normalizeJdAnalysis } from './jdAnalysisService.js';
 import { uniqueSkills } from './skillNormalization.js';
 
 export const jobSourceTypes = Object.freeze({ ON_CAMPUS: 'ON_CAMPUS', OFF_CAMPUS: 'OFF_CAMPUS' });
@@ -29,6 +30,15 @@ function finiteNumberOrNull(value) {
 function list(value, maxItems = 30, maxLength = 100) {
   const source = Array.isArray(value) ? value : typeof value === 'string' ? value.split(',') : [];
   return [...new Set(source.map((item) => text(String(item), maxLength)).filter(Boolean))].slice(0, maxItems);
+}
+
+function publicJdAnalysis(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const output = {};
+  for (const field of ['requiredSkills', 'preferredSkills', 'tools', 'technologies', 'frameworks', 'responsibilities', 'roleKeywords']) {
+    output[field] = list(value[field], field === 'responsibilities' || field === 'roleKeywords' ? 20 : 50, field === 'responsibilities' || field === 'roleKeywords' ? 240 : 120);
+  }
+  return { ...output, sourceHash: text(value.sourceHash, 128), analyzedAt: value.analyzedAt || null };
 }
 
 function date(value, label = 'Application deadline', required = false) {
@@ -93,6 +103,8 @@ export function publicJob(job) {
     postedAt: details.postedAt || null,
     applicationUrl: safeApplicationUrl(details.applicationUrl),
     requiredSkills: uniqueSkills(details.requiredSkills),
+    jdAnalysisStatus: ['NOT_ANALYZED', 'READY', 'STALE', 'FAILED'].includes(details.jdAnalysisStatus) ? details.jdAnalysisStatus : details.jdAnalysis ? 'READY' : 'NOT_ANALYZED',
+    jdAnalysis: publicJdAnalysis(details.jdAnalysis),
     eligibleBranches: list(details.eligibleBranches),
     graduationYears: list(details.graduationYears, 10, 4).map(Number).filter(Number.isInteger),
     minimumCgpa: finiteNumberOrNull(details.minimumCgpa),
@@ -118,6 +130,16 @@ export function normalizeOnCampusJob(input, partial = false) {
   if (Object.prototype.hasOwnProperty.call(input, 'eligibleBranches')) result.eligibleBranches = list(input.eligibleBranches);
   if (Object.prototype.hasOwnProperty.call(input, 'graduationYears')) result.graduationYears = list(input.graduationYears, 10, 4).map(Number).filter(Number.isInteger);
   if (Object.prototype.hasOwnProperty.call(input, 'requiredSkills')) result.requiredSkills = uniqueSkills(input.requiredSkills).slice(0, 50);
+  if (Object.prototype.hasOwnProperty.call(input, 'jdAnalysis')) {
+    if (input.jdAnalysis === null) {
+      result.jdAnalysis = null;
+    } else {
+      const description = Object.prototype.hasOwnProperty.call(input, 'jobDescription') ? result.jobDescription : input.jobDescription;
+      if (!description) throw validationError('A job description is required before saving JD requirements.');
+      result.jdAnalysis = { ...normalizeJdAnalysis(input.jdAnalysis, description, { requireSourceHash: true }), analyzedAt: new Date().toISOString() };
+      result.requiredSkills = result.jdAnalysis.requiredSkills;
+    }
+  }
 
   if (!partial) {
     for (const field of ['companyName', 'role', 'jobDescription', 'ctc', 'location', 'deadline']) {
@@ -171,6 +193,7 @@ export async function createCampusJob(input, managerId) {
     ...job,
     sourceType: jobSourceTypes.ON_CAMPUS,
     jobStatus: 'DRAFT',
+    jdAnalysisStatus: job.jdAnalysis ? 'READY' : 'NOT_ANALYZED',
     applicationUrl: null,
     createdBy: managerId,
     createdAt: now,
@@ -180,10 +203,23 @@ export async function createCampusJob(input, managerId) {
   return publicJob(record);
 }
 
-export async function updateCampusJob(jobId, input) {
+export async function updateCampusJob(jobId, input, jobsCollection = getJobsCollection()) {
   const changes = normalizeOnCampusJob(input, true);
-  const result = await (await getJobsCollection()).findOneAndUpdate(
-    { _id: jobId, sourceType: jobSourceTypes.ON_CAMPUS, jobStatus: { $ne: 'ARCHIVED' } },
+  if (Object.prototype.hasOwnProperty.call(input, 'jdAnalysis')) {
+    changes.jdAnalysisStatus = changes.jdAnalysis ? 'READY' : 'STALE';
+    if (!changes.jdAnalysis) changes.requiredSkills = [];
+  } else if (Object.prototype.hasOwnProperty.call(input, 'jobDescription')) {
+    // A changed description invalidates the prior interpretation. It must be
+    // explicitly re-analyzed; neither analytics nor student skill matching can
+    // continue to use the old JD-derived required-skills snapshot.
+    changes.jdAnalysis = null;
+    changes.jdAnalysisStatus = 'STALE';
+    changes.requiredSkills = [];
+  }
+  const result = await (await jobsCollection).findOneAndUpdate(
+    // Archiving removes a drive from the student-facing lifecycle, but the
+    // management UI still lists it and allows TPOs to correct its criteria.
+    { _id: jobId, sourceType: jobSourceTypes.ON_CAMPUS },
     { $set: { ...changes, updatedAt: new Date().toISOString() } },
     { returnDocument: 'after' }
   );
@@ -199,6 +235,9 @@ export async function setCampusJobStatus(jobId, jobStatus) {
     // Validate the stored canonical fields, including jobDescription, before a
     // draft becomes visible to students.
     normalizeOnCampusJob(existing);
+    if (existing.jdAnalysisStatus !== 'READY' || !existing.jdAnalysis) {
+      throw validationError('Analyze the job description and confirm its JD requirements before publishing this drive.');
+    }
   }
   const result = await jobs.findOneAndUpdate(
     { _id: jobId, sourceType: jobSourceTypes.ON_CAMPUS },

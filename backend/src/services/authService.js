@@ -222,7 +222,7 @@ export async function authenticateGoogleUser(credential) {
   if (user) {
     if (user.email !== email) {
       const accountUsingEmail = await users.findOne({ email, _id: { $ne: user._id } });
-      if (accountUsingEmail) throw authError('That Google account is already linked to another PlaceNexus account.', 409, 'GOOGLE_ACCOUNT_CONFLICT');
+      if (accountUsingEmail) throw authError('That Google account is already linked to another PlaceX account.', 409, 'GOOGLE_ACCOUNT_CONFLICT');
       await users.updateOne({ _id: user._id }, { $set: { email } });
       user.email = email;
     }
@@ -251,7 +251,7 @@ export async function authenticateGoogleUser(credential) {
     return publicUser(newUser);
   } catch (error) {
     if (error?.code === 11000) {
-      throw authError('That Google account is already linked to another PlaceNexus account.', 409, 'GOOGLE_ACCOUNT_CONFLICT');
+      throw authError('That Google account is already linked to another PlaceX account.', 409, 'GOOGLE_ACCOUNT_CONFLICT');
     }
     throw error;
   }

@@ -1,5 +1,6 @@
 import { getStudentProfilesCollection, getUsersCollection } from './database.js';
 import { normalizeLocations, normalizeProfileSkills, normalizeRoles } from './profileNormalization.js';
+import { resumeTextHash } from './resumeAnalysisService.js';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
@@ -97,6 +98,16 @@ function storedProfilePhotoUrl(value) {
   return /^\/profile-photos\/[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\.(?:jpe?g|png|webp)$/i.test(url) ? url : null;
 }
 
+function publicResume(value) {
+  if (!value || typeof value !== 'object') return null;
+  return {
+    originalName: text(value.originalName, 180),
+    fileType: text(value.fileType, 20),
+    size: storedNumber(value.size, true) || 0,
+    updatedAt: text(value.updatedAt || value.uploadedAt, 40)
+  };
+}
+
 function projects(value, validateTechnologies = false) {
   if (!Array.isArray(value)) return [];
   return value.slice(0, 10).map((project) => {
@@ -155,7 +166,9 @@ function toProfile(user, document) {
     projects: projects(profile.projects),
     preferredRoles: normalizeRoles(profile.preferredRoles),
     preferredLocations: normalizeLocations(profile.preferredLocations),
-    resume: profile.resume || null,
+    // Parsed resume text and its cached analysis stay server-side. A student
+    // receives only their resume metadata through the profile endpoint.
+    resume: publicResume(profile.resume),
     profilePhotoUrl: storedProfilePhotoUrl(profile.profilePhotoUrl),
     socialLinks: normalizeSocialLinks(profile.socialLinks, { validate: false }),
     email: user.email
@@ -211,6 +224,28 @@ export async function listActiveStudentProfiles() {
     .map((profile) => ({ ...profile, id: String(profile._id) }));
 }
 
+/**
+ * Resume analysis can evaluate a student whose only missing profile field is
+ * skills. The existing profile-mode listing remains unchanged, so its default
+ * behavior and eligibility population are preserved.
+ */
+export async function listActiveStudentProfilesForResumeAnalytics() {
+  const profiles = await (await getStudentProfilesCollection()).find({ userId: { $exists: true, $ne: '' } }).toArray();
+  const userIds = [...new Set(profiles.map((profile) => String(profile.userId)).filter(Boolean))];
+  if (!userIds.length) return [];
+  const studentUsers = await (await getUsersCollection()).find(
+    { _id: { $in: userIds }, role: { $in: ['STUDENT', null] } },
+    { projection: { _id: 1 } }
+  ).toArray();
+  const activeStudentIds = new Set(studentUsers.map((user) => String(user._id)));
+  return profiles
+    .filter((profile) => {
+      if (!activeStudentIds.has(String(profile.userId))) return false;
+      return profileCompletion(profile).missingMandatory.every((field) => field === 'Skills');
+    })
+    .map((profile) => ({ ...profile, id: String(profile._id) }));
+}
+
 export async function listStudentProfilesForTpo() {
   const [profiles, users] = await Promise.all([
     (await getStudentProfilesCollection()).find({ userId: { $exists: true, $ne: '' } }).toArray(),
@@ -239,16 +274,58 @@ export async function updateStudentProfile(user, input) {
   return getStudentProfile(user);
 }
 
-export async function setProfileResume(userId, resume) {
+function resumePrecondition(expectedResume) {
+  if (expectedResume === null) return { resume: { $exists: false } };
+  if (!expectedResume || typeof expectedResume !== 'object') return {};
+  const updatedAt = text(expectedResume.updatedAt, 40);
+  if (updatedAt) return { 'resume.updatedAt': updatedAt };
+  const id = text(expectedResume.id, 80);
+  if (id) return { 'resume.id': id };
+  const originalName = text(expectedResume.originalName, 180);
+  if (originalName) return { 'resume.originalName': originalName };
+  return { resume: expectedResume };
+}
+
+export async function setProfileResume(userId, resume, { profilesCollection = getStudentProfilesCollection(), expectedResume = undefined } = {}) {
+  const profiles = await profilesCollection;
+  const resumeText = String(resume?.resumeText || '').trim();
+  const sourceHash = resumeTextHash(resumeText);
   const now = new Date().toISOString();
-  await (await getStudentProfilesCollection()).updateOne(
-    { userId },
-    {
-      $set: { resume: { originalName: text(resume.originalName, 180), fileType: text(resume.fileType, 20), updatedAt: now }, updatedAt: now },
-      $setOnInsert: { userId, createdAt: now }
+  const current = await profiles.findOne({ userId }, { projection: { resume: 1 } });
+  const update = {
+    $set: {
+      resume: {
+        // These fields are already produced by the existing upload flow. Keep
+        // them with the canonical resume record instead of discarding the
+        // only safe reference to the uploaded file.
+        id: text(resume.id, 80),
+        originalName: text(resume.originalName, 180),
+        mimeType: text(resume.mimeType, 120),
+        fileType: text(resume.fileType, 20),
+        size: storedNumber(resume.size, true) || 0,
+        uploadedAt: text(resume.uploadedAt, 40) || now,
+        updatedAt: now,
+        parseStatus: 'READY',
+        parsedAt: now,
+        sourceHash,
+        // This text was already extracted by the backend from the student's
+        // authorized upload. It is never sent to TPO analytics clients.
+        resumeText
+      },
+      updatedAt: now
     },
-    { upsert: true }
+    $setOnInsert: { userId, createdAt: now }
+  };
+  if (current?.resume?.sourceHash !== sourceHash) update.$unset = { resumeAnalysis: '' };
+  const result = await profiles.updateOne(
+    { userId, ...(expectedResume === undefined ? {} : resumePrecondition(expectedResume)) },
+    update,
+    { upsert: expectedResume === undefined }
   );
+  return {
+    updated: expectedResume === undefined || Number(result?.matchedCount || 0) === 1,
+    resume: update.$set.resume
+  };
 }
 
 export async function replaceProfilePhoto(userId, profilePhotoUrl) {

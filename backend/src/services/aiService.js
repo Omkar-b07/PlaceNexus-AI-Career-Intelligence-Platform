@@ -160,36 +160,60 @@ function geminiResponseText(response) {
     .trim();
 }
 
+// All server-side Gemini calls share this transport. Feature services supply a
+// strict prompt and validate the returned JSON before it reaches persistence.
+export async function requestGeminiJson(prompt, emptyResponseMessage = 'Gemini API returned no content.') {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  if (!apiKey) throw new Error('Gemini is not configured.');
+
+  const model = process.env.GEMINI_MODEL?.trim() || 'gemini-3.5-flash-lite';
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  let response;
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.2,
+          responseMimeType: 'application/json'
+        }
+      }),
+      signal: AbortSignal.timeout(20_000)
+    });
+  } catch {
+    throw new Error('Gemini request was unavailable or timed out.');
+  }
+
+  if (!response.ok) throw new Error(`Gemini API returned ${response.status}.`);
+  let responseText;
+  try {
+    responseText = geminiResponseText(await response.json());
+  } catch {
+    const error = new Error('Gemini API returned malformed JSON.');
+    error.code = 'GEMINI_INVALID_RESPONSE';
+    throw error;
+  }
+  if (!responseText) throw new Error(emptyResponseMessage);
+  try {
+    return parseJson(responseText);
+  } catch {
+    const error = new Error('Gemini API returned malformed JSON.');
+    error.code = 'GEMINI_INVALID_RESPONSE';
+    throw error;
+  }
+}
+
 async function getGeminiRecommendations(resumeText, jobDescription) {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) return null;
 
   const prompt = `You are a precise career analyst. Compare the resume and job description below. Return JSON only, exactly in this shape: {"recommendations":["recommendation 1","recommendation 2","recommendation 3"]}. Every recommendation must be concise, actionable, and based only on evidence in the resume or a requirement in the job description. Do not invent experience, projects, or qualifications.\n\nRESUME:\n${resumeText}\n\nJOB DESCRIPTION:\n${jobDescription}`;
-  const model = process.env.GEMINI_MODEL?.trim() || 'gemini-3.5-flash-lite';
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-goog-api-key': apiKey
-    },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.2,
-        responseMimeType: 'application/json'
-      }
-    })
-  });
-
-  if (!response.ok) {
-    const details = await response.text().catch(() => '');
-    throw new Error(`Gemini API returned ${response.status}${details ? `: ${details.slice(0, 240)}` : '.'}`);
-  }
-
-  const responseText = geminiResponseText(await response.json());
-  if (!responseText) throw new Error('Gemini API returned no recommendation content.');
-  const result = parseJson(responseText);
+  const result = await requestGeminiJson(prompt, 'Gemini API returned no recommendation content.');
   if (!Array.isArray(result?.recommendations)) throw new Error('Gemini API returned an invalid recommendation response.');
   return { recommendations: result.recommendations.filter((item) => typeof item === 'string' && item.trim()).slice(0, 3) };
 }
@@ -250,31 +274,7 @@ Return valid JSON only in this exact shape:
   }
 }`;
 
-  const model = process.env.GEMINI_MODEL?.trim() || 'gemini-3.5-flash-lite';
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-goog-api-key': apiKey
-    },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.2,
-        responseMimeType: 'application/json'
-      }
-    })
-  });
-
-  if (!response.ok) {
-    const details = await response.text().catch(() => '');
-    throw new Error(`Gemini API returned ${response.status}${details ? `: ${details.slice(0, 240)}` : '.'}`);
-  }
-
-  const responseText = geminiResponseText(await response.json());
-  if (!responseText) throw new Error('Gemini API returned no plan content.');
-  const result = parseJson(responseText);
+  const result = await requestGeminiJson(prompt, 'Gemini API returned no plan content.');
   if (!Array.isArray(result?.steps) || result.steps.length === 0) {
     throw new Error('Gemini API returned an invalid plan structure.');
   }

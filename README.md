@@ -1,6 +1,6 @@
-# PlaceNexus 
+# PlaceX — Career Intelligence Platform
 
-PlaceNexus compares an uploaded resume with a job description and returns an explainable career analysis, what-if projection, and 30-day roadmap.
+PlaceX compares an uploaded resume with a job description and returns an explainable career analysis, what-if projection, and 30-day roadmap.
 
 ## Project layout
 
@@ -34,7 +34,7 @@ The backend runs at `http://localhost:5000`. The Vite frontend runs at `http://l
 
 The app requires an account before its dashboard and career-analysis endpoints can be used. Use **Create account** on the login screen, then sign in with that email and password. Account records are stored in MongoDB; configure `MONGODB_URI` in `backend/.env` before starting the server. Passwords are salted and hashed; they are never stored as plain text.
 
-Set a long, unique `AUTH_SECRET` in `backend/.env` before deploying the application. When it is unset locally, PlaceNexus creates a persistent development signing secret in MongoDB. Sessions last seven days by default; change this with `AUTH_TOKEN_TTL_SECONDS`.
+Set a long, unique `AUTH_SECRET` in `backend/.env` before deploying the application. When it is unset locally, PlaceX creates a persistent development signing secret in MongoDB. Sessions last seven days by default; change this with `AUTH_TOKEN_TTL_SECONDS`.
 
 ### MongoDB and Gemini setup
 
@@ -62,7 +62,7 @@ GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 VITE_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 ```
 
-In Google Cloud Console, create a Web OAuth client, configure the consent screen, and add `http://localhost:5174` as an Authorized JavaScript origin for local development. Add your deployed `https://` domain before production. The backend verifies every Google ID token before creating its PlaceNexus session.
+In Google Cloud Console, create a Web OAuth client, configure the consent screen, and add `http://localhost:5174` as an Authorized JavaScript origin for local development. Add your deployed `https://` domain before production. The backend verifies every Google ID token before creating its PlaceX session.
 
 ### Google service readiness
 

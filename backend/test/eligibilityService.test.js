@@ -4,6 +4,7 @@ import { evaluateEligibility } from '../src/services/eligibilityService.js';
 import { normalizeSkill, uniqueSkills } from '../src/services/skillNormalization.js';
 import { normalizeLocations, normalizeProfileSkills, normalizeRoles } from '../src/services/profileNormalization.js';
 import { profileCompletion } from '../src/services/profileService.js';
+import profileCatalog from '../../shared/profileCatalog.json' with { type: 'json' };
 
 const job = {
   minimumCgpa: 6.5,
@@ -98,6 +99,13 @@ test('normalizes branch formatting and numeric profile values from stored legacy
   assert.equal(result.checks.cgpa.passed, true);
   assert.equal(result.checks.backlogs.passed, true);
   assert.equal(result.checks.graduationYear.passed, true);
+});
+
+test('matches every student branch catalog value when the same value is selected for a drive', () => {
+  for (const { value } of profileCatalog.branchOptions) {
+    const result = evaluateEligibility(profile(['JavaScript', 'Node.js', 'Git'], { branch: value }), { ...job, eligibleBranches: [value] });
+    assert.equal(result.checks.branch.passed, true, value);
+  }
 });
 
 test('canonicalizes catalog skills and flags malformed legacy skills without guessing', () => {

@@ -19,7 +19,7 @@ export type StudentProfile = {
   preferredLocations: string[]
   socialLinks: StudentSocialLinks
   profilePhotoUrl: string | null
-  resume: Pick<ResumeData, 'originalName' | 'fileType'> & { updatedAt: string } | null
+  resume: Pick<ResumeData, 'originalName' | 'fileType' | 'size'> & { updatedAt: string } | null
 }
 
 export type ProfileCompletion = {
@@ -49,6 +49,19 @@ export type EligibilityResult = {
   }
 }
 
+export type JdAnalysisStatus = 'NOT_ANALYZED' | 'READY' | 'STALE' | 'FAILED'
+export type JdAnalysis = {
+  requiredSkills: string[]
+  preferredSkills: string[]
+  tools: string[]
+  technologies: string[]
+  frameworks: string[]
+  responsibilities: string[]
+  roleKeywords: string[]
+  sourceHash: string
+  analyzedAt?: string | null
+}
+
 export type PlacementJob = {
   id: string
   sourceType: 'ON_CAMPUS' | 'OFF_CAMPUS'
@@ -70,6 +83,8 @@ export type PlacementJob = {
   eligibleBranches: string[]
   graduationYears: number[]
   requiredSkills: string[]
+  jdAnalysisStatus: JdAnalysisStatus
+  jdAnalysis: JdAnalysis | null
   additionalCriteria?: string | null
   employmentType: string | null
   applicationUrl: string | null
@@ -104,32 +119,83 @@ export type DriveAnalyticsStudent = {
   branch: string
   cgpa: number | null
   skills: string[]
+  evidenceSkills: string[]
+  analysisSource: 'profile' | 'resume'
+  evidenceLabel: 'Profile Skills' | 'Resume Analysis'
+  analysisStatus: string
+  sourceAvailable: boolean
+  resumeAnalyzedAt: string | null
   matchedSkills: string[]
   missingSkills: string[]
   skillMatch: { matchedSkills: number; requiredSkills: number; percentage: number }
+  jdMatch: {
+    requiredMatched: string[]
+    requiredMissing: string[]
+    requiredTotal: number
+    requiredPercentage: number | null
+    preferredMatched: string[]
+    preferredMissing: string[]
+    preferredTotal: number
+    preferredPercentage: number | null
+    matchPercentage: number
+  }
   applicationStatus: string | null
 }
 
 export type DriveSkillGap = { skill: string; studentsMissing: number; percentage: number }
 
+export type StudentAnalysisSource = 'profile' | 'resume'
+
 export type DriveAnalytics = {
-  drive: { id: string; companyName: string | null; role: string | null; requiredSkills: string[] }
-  summary: { totalStudents: number; eligible: number; partialMatch: number; notEligible: number; driveEligibilityReadiness: number }
+  analysisSource: StudentAnalysisSource
+  sourceAvailability: {
+    totalStudents: number
+    studentsWithResume: number
+    studentsWithoutResume: number
+    studentsPendingParsing: number
+    studentsWithParsedResume: number
+    studentsWithResumeAnalysis: number
+    uploaded: number
+    available: number
+    unavailable: number
+    noUpload: number
+    legacyMetadata: number
+    parsingPending: number
+    parsingFailed: number
+    analysisPending: number
+    analysisFailed: number
+  }
+  drive: { id: string; companyName: string | null; role: string | null; requiredSkills: string[]; jdAnalysisStatus: JdAnalysisStatus; jdAnalysis: JdAnalysis | null }
+  jdAnalysis: ({ available: true; status: 'READY' } & JdAnalysis) | { available: false; status: Exclude<JdAnalysisStatus, 'READY'>; message: string }
+  summary: { totalStudents: number; analyzedStudents: number; resumeUnavailable: number; eligible: number; partialMatch: number; notEligible: number; driveEligibilityReadiness: number }
+  officialEligibility: { eligible: number; notEligible: number; readinessPercentage: number }
+  jdRoleFit: {
+    formula: { requiredWeight: number; preferredWeight: number; description: string }
+    distribution: { key: string; label: string; minimum: number; students: number; percentage: number }[]
+    requiredCoverage: { matched: number; possible: number; percentage: number }
+    preferredCoverage: { matched: number; possible: number; percentage: number }
+  }
   skillGaps: DriveSkillGap[]
+  preferredSkillGaps: DriveSkillGap[]
   branchAnalysis: {
     branch: string
     totalStudents: number
+    analyzedStudents: number
+    resumeUnavailableStudents: number
     eligibleStudents: number
     partialMatchStudents: number
     notEligibleStudents: number
     trainingCandidates: number
     readinessPercentage: number
+    averageJdMatchPercentage: number
   }[]
-  branchSkillGaps: { branch: string; totalStudents: number; skillGaps: { skill: string; studentsMissing: number }[] }[]
+  branchSkillGaps: { branch: string; totalStudents: number; analyzedStudents: number; resumeUnavailableStudents: number; skillGaps: { skill: string; studentsMissing: number }[] }[]
   trainingPriorities: (DriveSkillGap & { rank: number })[]
   eligibleStudents: DriveAnalyticsStudent[]
   trainingCandidates: DriveAnalyticsStudent[]
   notEligibleStudents: DriveAnalyticsStudent[]
+  resumeUnavailableStudents: DriveAnalyticsStudent[]
+  students: DriveAnalyticsStudent[]
 }
 
 export type InAppNotification = {
@@ -182,3 +248,13 @@ export type TpoDashboard = {
 }
 
 export type TpoNotification = { id: string; type: string; title: string; message: string; createdAt: string | null; relatedJobId: string | null }
+
+export type LegacyResumeItem = {
+  legacyResumeId: string
+  originalName: string | null
+  fileType: string
+  mimeType: string
+  size: number
+  modifiedAt: string
+  status: 'UNLINKED' | 'ASSIGNED'
+}

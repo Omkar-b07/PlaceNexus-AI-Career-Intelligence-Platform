@@ -1,5 +1,5 @@
 import type { CareerAnalysis, CareerHistoryDetail, CareerHistorySummary, InstantPlanDurationHours, InstantSkillPlan, LearningResource, ResumeData } from '../types/career'
-import type { ApplicationTrackingResult, DriveAnalytics, InAppNotification, PlacementApplication, PlacementJob, ProfileCompletion, StudentProfile, TpoApplication, TpoDashboard, TpoNotification, TpoStudent } from '../types/placement'
+import type { ApplicationTrackingResult, DriveAnalytics, InAppNotification, JdAnalysis, LegacyResumeItem, PlacementApplication, PlacementJob, ProfileCompletion, StudentAnalysisSource, StudentProfile, TpoApplication, TpoDashboard, TpoNotification, TpoStudent } from '../types/placement'
 import { clearAuthSession, getAuthToken } from './auth'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
@@ -7,6 +7,13 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
 type AnalysisPayload = Partial<CareerAnalysis>
 
 type PlanStep = CareerAnalysis['plan30Days'][number]
+
+export class ApiRequestError extends Error {
+  constructor(message: string, readonly status: number, readonly code?: string) {
+    super(message)
+    this.name = 'ApiRequestError'
+  }
+}
 
 const defaultBreakdown: CareerAnalysis['scoreBreakdown'] = {
   skillsMatch: 0, experienceMatch: 0, projectMatch: 0, educationMatch: null,
@@ -105,7 +112,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error('Unable to connect to the analysis service. Please make sure the backend is running.')
   }
 
-  let payload: { data?: T; error?: { message?: string } } | null = null
+  let payload: { data?: T; error?: { message?: string; code?: string } } | null = null
   try {
     payload = await response.json()
   } catch {
@@ -113,7 +120,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (!response.ok) {
     if (response.status === 401) clearAuthSession()
-    throw new Error(payload?.error?.message || 'Something went wrong.')
+    throw new ApiRequestError(payload?.error?.message || 'Something went wrong.', response.status, payload?.error?.code)
   }
   if (!payload || !('data' in payload)) throw new Error('The analysis service returned an incomplete response.')
   return payload.data as T
@@ -203,7 +210,7 @@ export function getOffCampusJobs() {
 
 export type CampusJobInput = {
   companyName: string; role: string; jobDescription: string; ctc: string; ctcLpa: number | null; location: string; deadline: string
-  requiredSkills: string[]; eligibleBranches: string[]; minimumCgpa: number | null; maximumBacklogs: number | null; graduationYears: number[]; employmentType: string; additionalCriteria: string
+  jdAnalysis: JdAnalysis | null; eligibleBranches: string[]; minimumCgpa: number | null; maximumBacklogs: number | null; graduationYears: number[]; employmentType: string; additionalCriteria: string
 }
 
 export function getManagedCampusJobs() {
@@ -212,6 +219,10 @@ export function getManagedCampusJobs() {
 
 export function createCampusJob(input: CampusJobInput) {
   return request<PlacementJob>('/jobs/on-campus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
+}
+
+export function analyzeCampusJobDescription(jobDescription: string) {
+  return request<JdAnalysis>('/jobs/on-campus/analyze-jd', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jobDescription }) })
 }
 
 export function updateCampusJob(jobId: string, input: Partial<CampusJobInput>) {
@@ -234,8 +245,9 @@ export function getEligibleCampusStudents(jobId: string) {
   return request<{ items: { studentId: string; profile: Pick<StudentProfile, 'fullName' | 'branch' | 'cgpa' | 'graduationYear'> }[] }>(`/jobs/on-campus/${encodeURIComponent(jobId)}/eligible-students`).then((result) => result.items || [])
 }
 
-export function getCampusDriveAnalytics(jobId: string) {
-  return request<DriveAnalytics>(`/jobs/on-campus/${encodeURIComponent(jobId)}/analytics`)
+export function getCampusDriveAnalytics(jobId: string, analysisSource: StudentAnalysisSource = 'profile') {
+  const query = new URLSearchParams({ analysisSource })
+  return request<DriveAnalytics>(`/jobs/on-campus/${encodeURIComponent(jobId)}/analytics?${query.toString()}`)
 }
 
 export function getTpoDashboard() {
@@ -256,6 +268,35 @@ export function getTpoApplications() {
 
 export function getTpoNotifications() {
   return request<{ items: TpoNotification[] }>('/tpo/notifications').then((result) => result.items || [])
+}
+
+export function getLegacyResumeInventory() {
+  return request<{ items: LegacyResumeItem[] }>('/tpo/legacy-resumes').then((result) => result.items || [])
+}
+
+export function assignLegacyResume(legacyResumeId: string, input: { studentId: string; replaceExisting: boolean; confirmed: boolean }) {
+  return request<{ legacyResume: LegacyResumeItem; studentId: string; analysisStatus: string; assignedAt: string }>(`/tpo/legacy-resumes/${encodeURIComponent(legacyResumeId)}/assign`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input)
+  })
+}
+
+export async function getLegacyResumePreviewBlob(legacyResumeId: string) {
+  const headers = new Headers()
+  const token = getAuthToken()
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+  let response: Response
+  try {
+    response = await fetch(`${API_URL}/tpo/legacy-resumes/${encodeURIComponent(legacyResumeId)}/preview`, { headers })
+  } catch {
+    throw new Error('Unable to load the secure resume preview.')
+  }
+  if (!response.ok) {
+    let payload: { error?: { message?: string; code?: string } } | null = null
+    try { payload = await response.json() } catch { /* a non-JSON error is still safely handled below */ }
+    if (response.status === 401) clearAuthSession()
+    throw new ApiRequestError(payload?.error?.message || 'Unable to load the secure resume preview.', response.status, payload?.error?.code)
+  }
+  return { blob: await response.blob(), contentType: response.headers.get('content-type') || '' }
 }
 
 export function updateCampusApplicationStatus(applicationId: string, status: string) {

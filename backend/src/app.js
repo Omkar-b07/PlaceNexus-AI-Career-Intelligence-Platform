@@ -25,7 +25,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/profile-photos', express.static(profilePhotoDirectory, { dotfiles: 'deny', index: false, maxAge: '7d' }));
 
 app.get('/health', (_req, res) => {
-  res.status(200).json({ success: true, message: 'PlaceNexus API is healthy' });
+  res.status(200).json({ success: true, message: 'PlaceX API is healthy' });
 });
 
 app.use('/auth', authRoutes);

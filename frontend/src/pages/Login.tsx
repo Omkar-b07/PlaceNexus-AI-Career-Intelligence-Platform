@@ -77,8 +77,8 @@ export default function Login({ onLogin, onRegister, onGoogleLogin, tpoOnly = fa
       <section className="login-intro placement-landing" aria-labelledby="login-product-heading">
         <header className="landing-header">
           <div className="login-brand">
-            <span className="brand-mark" aria-label="PlaceNexus"><span className="brand-mark-p">P</span><span className="brand-mark-n">N</span></span>
-            <span>PlaceNexus <i>AI</i></span>
+            <span className="brand-mark" aria-label="PlaceX"><span className="brand-mark-p">P</span><span className="brand-mark-n">X</span></span>
+            <span>PlaceX</span>
           </div>
           <div className="landing-header-actions"><button type="button" className="landing-login-link" onClick={tpoOnly ? onOpenStudentLogin : () => chooseMode('login')}>{tpoOnly ? 'Student login' : 'Log in'}</button>{!tpoOnly && <button type="button" className="landing-header-cta" onClick={() => chooseMode('register')}>Get started</button>}</div>
         </header>
@@ -107,7 +107,7 @@ export default function Login({ onLogin, onRegister, onGoogleLogin, tpoOnly = fa
             <div className="landing-channel-grid"><article><span>ON-CAMPUS</span><h3>TPO-published opportunities from your college.</h3><p>TPO → Publish drive → Student eligibility → Apply → Application tracking</p></article><article><span>OFF-CAMPUS</span><h3>External opportunities from job sources.</h3><p>Job source → Opportunity → Skill and eligibility match → Apply on company site → Tracking</p></article></div>
           </section>
 
-          <section className="landing-section landing-audience" aria-label="PlaceNexus audiences">
+          <section className="landing-section landing-audience" aria-label="PlaceX audiences">
             <article><p className="eyebrow">FOR STUDENTS</p><h2>Stay on top of every placement opportunity.</h2><ul><li>Complete a placement profile</li><li>Discover eligible campus and external jobs</li><li>Track applications and prepare for interviews</li></ul></article><article><p className="eyebrow">FOR TPOs</p><h2>Manage campus hiring from one place.</h2><ul><li>Publish placement drives</li><li>Define official eligibility criteria</li><li>View applications and manage their stages</li></ul></article></section>
 
           <section className="landing-section landing-intelligence" aria-labelledby="career-intelligence-heading">
@@ -122,9 +122,9 @@ export default function Login({ onLogin, onRegister, onGoogleLogin, tpoOnly = fa
 
       <section className="login-form-area" ref={formRef} aria-labelledby="login-heading">
         <div className="login-card">
-          <p className="eyebrow">{tpoOnly ? 'TPO / ADMIN ACCESS' : 'PLACE NEXUS ACCOUNT'}</p>
+          <p className="eyebrow">{tpoOnly ? 'TPO / ADMIN ACCESS' : 'PLACEX ACCOUNT'}</p>
           <h2 id="login-heading">{tpoOnly ? 'TPO / Admin sign in' : isRegistration ? 'Start your placement journey' : 'Welcome back'}</h2>
-          <p className="login-lede">{tpoOnly ? 'Use your existing PlaceNexus account. Access is confirmed from your server-managed role after authentication.' : isRegistration ? 'Create an account to organize opportunities, eligibility, applications, and preparation in one place.' : 'Sign in to return to your placement workspace.'}</p>
+          <p className="login-lede">{tpoOnly ? 'Use your existing PlaceX account. Access is confirmed from your server-managed role after authentication.' : isRegistration ? 'Create an account to organize opportunities, eligibility, applications, and preparation in one place.' : 'Sign in to return to your placement workspace.'}</p>
 
           <form noValidate onSubmit={handleSubmit}>
             <div className="login-field"><label htmlFor={emailId}>Email</label><input id={emailId} name="email" type="email" value={email} onChange={(event) => { setEmail(event.target.value); setErrors((current) => ({ ...current, email: undefined })) }} autoComplete="email" inputMode="email" aria-invalid={Boolean(errors.email)} aria-describedby={errors.email ? `${emailId}-error` : undefined} />{errors.email && <p id={`${emailId}-error`} className="field-error" role="alert">{errors.email}</p>}</div>
@@ -139,7 +139,7 @@ export default function Login({ onLogin, onRegister, onGoogleLogin, tpoOnly = fa
           {notice && <p id="login-notice" className="login-notice" role="status">{notice}</p>}
           {tpoOnly
             ? <p className="signup-copy">Need the student workspace? <button type="button" onClick={onOpenStudentLogin}>Student login</button></p>
-            : <><p className="signup-copy">{isRegistration ? 'Already have an account?' : 'New to PlaceNexus?'} <button type="button" onClick={() => chooseMode(isRegistration ? 'login' : 'register', false)}>{isRegistration ? 'Sign in' : 'Create account'}</button></p><button type="button" className="tpo-login-link" onClick={onOpenTpoLogin}>TPO / Admin Login</button></>}
+            : <><p className="signup-copy">{isRegistration ? 'Already have an account?' : 'New to PlaceX?'} <button type="button" onClick={() => chooseMode(isRegistration ? 'login' : 'register', false)}>{isRegistration ? 'Sign in' : 'Create account'}</button></p><button type="button" className="tpo-login-link" onClick={onOpenTpoLogin}>TPO / Admin Login</button></>}
         </div>
       </section>
     </div>

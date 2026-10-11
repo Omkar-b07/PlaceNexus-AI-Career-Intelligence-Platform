@@ -1,0 +1,95 @@
+%% PlaceX - System Architecture
+%% Verified against the current React/Vite frontend and Express backend.
+flowchart TB
+    classDef actor fill:#0f172a,color:#ffffff,stroke:#0f172a,stroke-width:1.5px
+    classDef client fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7,stroke-width:1.5px
+    classDef api fill:#ede9fe,color:#4c1d95,stroke:#7c3aed,stroke-width:1.5px
+    classDef service fill:#f5f3ff,color:#4c1d95,stroke:#8b5cf6,stroke-width:1.2px
+    classDef store fill:#ecfdf5,color:#065f46,stroke:#10b981,stroke-width:1.5px
+    classDef external fill:#fff7ed,color:#9a3412,stroke:#f97316,stroke-width:1.5px
+    classDef security fill:#fef2f2,color:#991b1b,stroke:#ef4444,stroke-width:1.2px
+
+    Student([Student]):::actor
+    TPO([TPO / Admin]):::actor
+
+    subgraph Client["Presentation layer - React + Vite single-page application"]
+        direction LR
+        StudentUI["Student workspace<br/>Placement Hub, Profile, Jobs, Applications, Notifications"]:::client
+        CareerUI["Career intelligence<br/>Analyze Fit, What-if Simulator, Quick Roadmap, Saved Analyses"]:::client
+        DsaUI["DSA Preparation<br/>Problems, filters, progress, dashboard"]:::client
+        TpoUI["TPO workspace<br/>Drives, analytics, students, applications, reports, legacy resumes"]:::client
+    end
+
+    subgraph API["Application layer - Node.js + Express API"]
+        direction TB
+        Auth["Auth routes and session validation"]:::api
+        Guard["requireAuth<br/>Bearer session required"]:::security
+        Admin["requireAdmin<br/>TPO or ADMIN required"]:::security
+
+        Profile["Profile and resume services<br/>profile updates, uploads, parsing"]:::service
+        Career["Career services<br/>fit analysis, simulation, instant plans, history"]:::service
+        Placement["Placement services<br/>on-campus drives, JD analysis, eligibility"]:::service
+        Applications["Application service<br/>student tracking and TPO status updates"]:::service
+        Analytics["Drive analytics service<br/>profile or resume evidence source"]:::service
+        DSA["DSA services<br/>problem catalogue and per-user progress"]:::service
+        Legacy["Legacy resume service<br/>inventory, authorized preview, explicit assignment"]:::service
+        Notifications["Notification service"]:::service
+    end
+
+    subgraph Files["Backend file storage"]
+        direction LR
+        Resumes["uploads/resumes<br/>private resume files"]:::store
+        Photos["uploads/profile-photos<br/>static profile-photo route"]:::store
+    end
+
+    subgraph Data["MongoDB data layer"]
+        direction LR
+        Main[("placenexus<br/>users, student_profiles, jobs, applications,<br/>career_analyses, notifications, instant_plans,<br/>system_settings, legacy_resume_assignments")]:::store
+        Prep[("PlaceNexusPreparation<br/>dsaProblems, dsaProgress")]:::store
+    end
+
+    subgraph External["External services actually integrated"]
+        direction LR
+        GoogleIdentity["Google Identity<br/>optional Google sign-in"]:::external
+        Gemini["Google Gemini<br/>JSON analysis and plan generation"]:::external
+        Adzuna["Adzuna Jobs API<br/>off-campus search"]:::external
+    end
+
+    Student --> StudentUI
+    StudentUI --- CareerUI
+    StudentUI --- DsaUI
+    TPO --> TpoUI
+
+    StudentUI --> Auth
+    CareerUI --> Guard
+    DsaUI --> Guard
+    TpoUI --> Guard
+    Guard --> Admin
+
+    Guard --> Profile
+    Guard --> Career
+    Guard --> Placement
+    Guard --> Applications
+    Guard --> DSA
+    Guard --> Notifications
+    Admin --> Analytics
+    Admin --> Legacy
+
+    Auth <--> Main
+    Auth <--> GoogleIdentity
+    Profile <--> Main
+    Profile <--> Resumes
+    Profile <--> Photos
+    Career <--> Main
+    Career <--> Gemini
+    Placement <--> Main
+    Placement <--> Gemini
+    Placement <--> Adzuna
+    Applications <--> Main
+    Analytics <--> Main
+    Analytics <--> Gemini
+    DSA <--> Prep
+    Legacy <--> Main
+    Legacy <--> Resumes
+    Legacy <--> Gemini
+    Notifications <--> Main

@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BarChart3, Bell, BookOpen, BriefcaseBusiness, CheckCircle2, ClipboardList, FileBarChart, GraduationCap, LayoutDashboard, LoaderCircle, LogOut, Menu, Plus, UserRound, UsersRound, X } from 'lucide-react'
+import { BarChart3, Bell, BookOpen, BriefcaseBusiness, CheckCircle2, ClipboardList, FileBarChart, FileCheck2, GraduationCap, LayoutDashboard, LoaderCircle, LogOut, Menu, Plus, UserRound, UsersRound, X } from 'lucide-react'
 import applicationStatuses from '../../../shared/applicationStatuses.json'
 import { getCampusDriveAnalytics, getManagedCampusJobs, getTpoApplications, getTpoDashboard, getTpoNotifications, getTpoStudent, getTpoStudents, updateCampusApplicationStatus } from '../services/api'
 import { profilePhotoUrl } from '../services/api'
 import type { DriveAnalytics, PlacementJob, TpoApplication, TpoDashboard, TpoNotification, TpoStudent } from '../types/placement'
 import TpoDriveAnalytics from './TpoDriveAnalytics'
 import TpoDriveManagement from './TpoDriveManagement'
+import TpoLegacyResumeReattachment from './TpoLegacyResumeReattachment'
 import '../placement.css'
 
-type TpoPage = 'dashboard' | 'drives' | 'driveNew' | 'driveDetail' | 'analytics' | 'studentAnalysis' | 'students' | 'studentDetail' | 'applications' | 'placementStatus' | 'training' | 'reports' | 'notifications' | 'profile'
+type TpoPage = 'dashboard' | 'drives' | 'driveNew' | 'driveDetail' | 'analytics' | 'studentAnalysis' | 'students' | 'studentDetail' | 'applications' | 'placementStatus' | 'training' | 'legacyResumes' | 'reports' | 'notifications' | 'profile'
 type RouteState = { page: TpoPage; id: string | null }
 type TpoWorkspaceProps = { user: { email?: string; role?: 'TPO' | 'ADMIN' | 'STUDENT' } | null; onLogout: () => void }
 
@@ -20,6 +21,7 @@ const navItems: { page: TpoPage; path: string; label: string; icon: typeof Layou
   { page: 'applications', path: '/tpo/applications', label: 'Applications', icon: ClipboardList },
   { page: 'placementStatus', path: '/tpo/placement-status', label: 'Placement Status', icon: GraduationCap },
   { page: 'training', path: '/tpo/training', label: 'Training & Development', icon: BookOpen },
+  { page: 'legacyResumes', path: '/tpo/legacy-resumes', label: 'Resume Reattachment', icon: FileCheck2 },
   { page: 'reports', path: '/tpo/reports', label: 'Reports & Analytics', icon: FileBarChart },
   { page: 'notifications', path: '/tpo/notifications', label: 'Notifications', icon: Bell }
 ]
@@ -34,7 +36,7 @@ function routeFromPath(): RouteState {
   const student = path.match(/^\/tpo\/students\/([^/]+)$/)
   if (student) return { page: 'studentDetail', id: decodeURIComponent(student[1]) }
   const map: Record<string, TpoPage> = {
-    '/tpo/dashboard': 'dashboard', '/tpo/drives': 'drives', '/tpo/student-analysis': 'studentAnalysis', '/tpo/students': 'students', '/tpo/applications': 'applications', '/tpo/placement-status': 'placementStatus', '/tpo/training': 'training', '/tpo/reports': 'reports', '/tpo/notifications': 'notifications', '/tpo/profile': 'profile'
+    '/tpo/dashboard': 'dashboard', '/tpo/drives': 'drives', '/tpo/student-analysis': 'studentAnalysis', '/tpo/students': 'students', '/tpo/applications': 'applications', '/tpo/placement-status': 'placementStatus', '/tpo/training': 'training', '/tpo/legacy-resumes': 'legacyResumes', '/tpo/reports': 'reports', '/tpo/notifications': 'notifications', '/tpo/profile': 'profile'
   }
   return { page: map[path] || 'dashboard', id: null }
 }
@@ -54,7 +56,7 @@ function TpoDashboardPage({ onNavigate }: { onNavigate: (path: string) => void }
 function StudentAnalysisPage({ onNavigate }: { onNavigate: (path: string) => void }) {
   const [drives, setDrives] = useState<PlacementJob[]>([]); const [overview, setOverview] = useState<TpoDashboard | null>(null); const [driveId, setDriveId] = useState('')
   useEffect(() => { void Promise.all([getManagedCampusJobs(), getTpoDashboard()]).then(([items, dashboard]) => { setDrives(items); setOverview(dashboard) }).catch(() => { setDrives([]); setOverview(null) }) }, [])
-  if (driveId) return <TpoDriveAnalytics driveId={driveId} onBack={() => setDriveId('')} />
+  if (driveId) return <TpoDriveAnalytics driveId={driveId} onBack={() => setDriveId('')} onEditDrive={() => onNavigate(`/tpo/drives/${driveId}`)} />
   return <section className="placement-workspace tpo-workspace"><section className="placement-header"><div><p className="eyebrow">STUDENT ANALYSIS</p><h2>Readiness by placement drive</h2><p className="muted">Select a drive to reuse its official eligibility and skill-gap analytics.</p></div></section>{overview && <section className="tpo-overview-grid"><article className="tpo-overview-card"><span>Total students</span><strong>{overview.summary.totalStudents}</strong></article><article className="tpo-overview-card"><span>Complete profiles</span><strong>{overview.summary.completeProfiles}</strong></article><article className="tpo-overview-card"><span>Active drives</span><strong>{overview.summary.activeDrives}</strong></article></section>}<section className="placement-card"><div className="analytics-filters"><label>Placement drive<select value={driveId} onChange={(event) => setDriveId(event.target.value)}><option value="">Select a campus drive</option>{drives.map((drive) => <option key={drive.id} value={drive.id}>{drive.companyName || 'Campus drive'} · {drive.role || 'Role'}</option>)}</select></label></div>{!drives.length && <p className="muted">Create a placement drive before running drive-specific student analysis.</p>}<button className="secondary-button" onClick={() => onNavigate('/tpo/drives/new')}><Plus size={15} />Create drive</button></section></section>
 }
 
@@ -101,15 +103,16 @@ export default function TpoWorkspace({ user, onLogout }: TpoWorkspaceProps) {
     if (route.page === 'drives') return <TpoDriveManagement onNavigate={navigate} onOpenAnalytics={(id) => navigate(`/tpo/drives/${id}/analytics`)} />
     if (route.page === 'driveNew') return <TpoDriveManagement page="new" onNavigate={navigate} onOpenAnalytics={() => {}} />
     if (route.page === 'driveDetail') return <TpoDriveManagement page="detail" driveId={route.id} onNavigate={navigate} onOpenAnalytics={(id) => navigate(`/tpo/drives/${id}/analytics`)} />
-    if (route.page === 'analytics' && route.id) return <TpoDriveAnalytics driveId={route.id} onBack={() => navigate('/tpo/drives')} />
+    if (route.page === 'analytics' && route.id) return <TpoDriveAnalytics driveId={route.id} onBack={() => navigate('/tpo/drives')} onEditDrive={() => navigate(`/tpo/drives/${route.id}`)} />
     if (route.page === 'studentAnalysis') return <StudentAnalysisPage onNavigate={navigate} />
     if (route.page === 'students' || route.page === 'studentDetail') return <StudentsPage studentId={route.page === 'studentDetail' ? route.id : null} onNavigate={navigate} />
     if (route.page === 'applications') return <ApplicationsPage />
     if (route.page === 'placementStatus') return <DashboardMetricsPage mode="placementStatus" />
     if (route.page === 'training') return <TrainingPage />
+    if (route.page === 'legacyResumes') return <TpoLegacyResumeReattachment />
     if (route.page === 'reports') return <DashboardMetricsPage mode="reports" />
     if (route.page === 'notifications') return <NotificationsPage />
     return <section className="placement-workspace tpo-workspace"><section className="placement-card"><p className="eyebrow">TPO PROFILE</p><h2>{user?.email || 'TPO account'}</h2><p className="muted">Role: {user?.role || 'TPO'}</p></section></section>
   }
-  return <div className="app-shell"><div className="app-frame"><aside className={`sidebar tpo-sidebar ${sidebarOpen ? 'open' : ''}`} id="tpo-navigation"><div className="sidebar-brand"><span className="brand-mark"><span className="brand-mark-p">P</span><span className="brand-mark-n">N</span></span><span><span className="brand-name">PlaceNexus <i>AI</i></span><span className="brand-subtitle">TPO workspace</span></span></div><nav className="sidebar-nav" aria-label="TPO workspace">{navItems.map((item) => { const Icon = item.icon; return <button key={item.path} className={route.page === item.page || (item.page === 'drives' && ['driveNew', 'driveDetail', 'analytics'].includes(route.page)) ? 'active' : ''} onClick={() => navigate(item.path)}><span><Icon size={16} />{item.label}</span></button> })}</nav><div className="sidebar-actions"><button className={`sidebar-profile ${route.page === 'profile' ? 'active' : ''}`} onClick={() => navigate('/tpo/profile')}><UserRound size={16} />Profile</button><p className="sidebar-user"><span className="status-dot" />{user?.email || 'TPO workspace'}</p><button className="sidebar-logout" onClick={onLogout}><LogOut size={16} />Log out</button></div></aside><button className={`sidebar-overlay ${sidebarOpen ? 'visible' : ''}`} type="button" aria-label="Close navigation menu" onClick={() => setSidebarOpen(false)} /><div className="app-page"><header className="mobile-topbar"><div className="mobile-brand"><span className="brand-mark"><span className="brand-mark-p">P</span><span className="brand-mark-n">N</span></span><strong>PlaceNexus AI</strong></div><button className="mobile-menu-button" onClick={() => setSidebarOpen((open) => !open)}>{sidebarOpen ? <X size={20} /> : <Menu size={20} />}</button></header><main className="workspace main-content">{renderPage()}</main><footer>PlaceNexus AI <span>•</span> TPO placement management</footer></div></div></div>
+  return <div className="app-shell"><div className="app-frame"><aside className={`sidebar tpo-sidebar ${sidebarOpen ? 'open' : ''}`} id="tpo-navigation"><div className="sidebar-brand"><span className="brand-mark"><span className="brand-mark-p">P</span><span className="brand-mark-n">X</span></span><span><span className="brand-name">PlaceX</span><span className="brand-subtitle">TPO workspace</span></span></div><nav className="sidebar-nav" aria-label="TPO workspace">{navItems.map((item) => { const Icon = item.icon; return <button key={item.path} className={route.page === item.page || (item.page === 'drives' && ['driveNew', 'driveDetail', 'analytics'].includes(route.page)) ? 'active' : ''} onClick={() => navigate(item.path)}><span><Icon size={16} />{item.label}</span></button> })}</nav><div className="sidebar-actions"><button className={`sidebar-profile ${route.page === 'profile' ? 'active' : ''}`} onClick={() => navigate('/tpo/profile')}><UserRound size={16} />Profile</button><p className="sidebar-user"><span className="status-dot" />{user?.email || 'TPO workspace'}</p><button className="sidebar-logout" onClick={onLogout}><LogOut size={16} />Log out</button></div></aside><button className={`sidebar-overlay ${sidebarOpen ? 'visible' : ''}`} type="button" aria-label="Close navigation menu" onClick={() => setSidebarOpen(false)} /><div className="app-page"><header className="mobile-topbar"><div className="mobile-brand"><span className="brand-mark"><span className="brand-mark-p">P</span><span className="brand-mark-n">X</span></span><strong>PlaceX</strong></div><button className="mobile-menu-button" onClick={() => setSidebarOpen((open) => !open)}>{sidebarOpen ? <X size={20} /> : <Menu size={20} />}</button></header><main className="workspace main-content">{renderPage()}</main><footer>PlaceX <span>•</span> TPO placement management</footer></div></div></div>
 }

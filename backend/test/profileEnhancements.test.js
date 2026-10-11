@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
-import { hasValidProfilePhotoSignature, profilePhotoPathFromUrl } from '../src/middleware/upload.js';
-import { emptySocialLinks, normalizePartial, normalizeSocialLinks, profileCompletion } from '../src/services/profileService.js';
+import { hasValidProfilePhotoSignature, profilePhotoPathFromUrl, resumePathFromId } from '../src/middleware/upload.js';
+import { emptySocialLinks, normalizePartial, normalizeSocialLinks, profileCompletion, setProfileResume } from '../src/services/profileService.js';
+import { resumeTextHash } from '../src/services/resumeAnalysisService.js';
 import profileCatalog from '../../shared/profileCatalog.json' with { type: 'json' };
 
 test('accepts each canonical branch value and rejects values outside the branch catalog', () => {
@@ -50,6 +51,33 @@ test('profile photo and social links remain optional for profile completion', ()
 
   assert.equal(completion.fields.some((field) => field.key === 'socialLinks' || field.key === 'profilePhotoUrl'), false);
   assert.equal(completion.missingMandatory.length, 0);
+});
+
+test('resolves only UUID-backed resume files within the existing resume upload directory', () => {
+  const resolved = resumePathFromId('123e4567-e89b-12d3-a456-426614174000.pdf');
+  assert.ok(resolved?.endsWith(path.join('uploads', 'resumes', '123e4567-e89b-12d3-a456-426614174000.pdf')));
+  assert.equal(resumePathFromId('../../.env'), null);
+});
+
+test('replacing a parsed resume persists the new canonical reference and invalidates a changed analysis hash', async () => {
+  const writes = [];
+  const resumeText = 'Built React interfaces and Node.js APIs.';
+  await setProfileResume('student-1', {
+    id: '123e4567-e89b-12d3-a456-426614174000.pdf', originalName: 'resume.pdf', mimeType: 'application/pdf', fileType: 'PDF', size: 1024,
+    uploadedAt: '2026-10-03T00:00:00.000Z', resumeText
+  }, {
+    profilesCollection: {
+      async findOne() { return { resume: { sourceHash: 'previous-resume-hash' } }; },
+      async updateOne(filter, update, options) { writes.push({ filter, update, options }); }
+    }
+  });
+
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].filter.userId, 'student-1');
+  assert.equal(writes[0].update.$set.resume.id, '123e4567-e89b-12d3-a456-426614174000.pdf');
+  assert.equal(writes[0].update.$set.resume.resumeText, resumeText);
+  assert.equal(writes[0].update.$set.resume.sourceHash, resumeTextHash(resumeText));
+  assert.deepEqual(writes[0].update.$unset, { resumeAnalysis: '' });
 });
 
 test('accepts only image content that matches the claimed profile photo MIME type', () => {

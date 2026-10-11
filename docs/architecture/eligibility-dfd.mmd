@@ -1,0 +1,38 @@
+%% PlaceX - Official Placement Eligibility Data Flow
+flowchart LR
+    classDef actor fill:#0f172a,color:#ffffff,stroke:#0f172a,stroke-width:1.5px
+    classDef process fill:#ede9fe,color:#4c1d95,stroke:#7c3aed,stroke-width:1.5px
+    classDef deterministic fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7,stroke-width:1.5px
+    classDef store fill:#ecfdf5,color:#065f46,stroke:#10b981,stroke-width:1.5px
+    classDef note fill:#f8fafc,color:#334155,stroke:#94a3b8,stroke-dasharray: 4 3
+
+    Student([Student]):::actor
+    TPO([TPO / Admin]):::actor
+    Profiles[("student_profiles<br/>branch, CGPA, backlogs, graduationYear, skills")]:::store
+    Drives[("jobs - ON_CAMPUS<br/>eligibleBranches, minimumCgpa, maximumBacklogs,<br/>graduationYears, requiredSkills, publish status")]:::store
+
+    Student -->|"profile maintenance"| Profiles
+    TPO -->|"drive criteria; draft / publish"| Drives
+    Student -->|"view a published drive"| Request["Placement job request"]:::process
+    Drives --> Request
+    Profiles --> Request
+
+    Request --> Branch["Branch check<br/>normalizeBranch on student and drive values;<br/>'all' matches every branch"]:::deterministic
+    Request --> Cgpa["CGPA check<br/>student CGPA >= minimum CGPA"]:::deterministic
+    Request --> Backlogs["Backlog check<br/>student backlogs <= maximum"]:::deterministic
+    Request --> Year["Graduation-year check<br/>student year is listed"]:::deterministic
+    Request --> Skills["Required-skills check<br/>central skill normalization"]:::deterministic
+
+    Branch --> Evaluate["evaluateEligibility"]:::process
+    Cgpa --> Evaluate
+    Backlogs --> Evaluate
+    Year --> Evaluate
+    Skills --> Evaluate
+    Evaluate --> Decision{"All official checks pass?"}:::deterministic
+    Decision -->|"Yes"| Eligible["Eligible<br/>criteria source: OFFICIAL_TPO_ELIGIBILITY"]:::process
+    Decision -->|"No"| Ineligible["Not eligible<br/>per-check values and reasons returned"]:::process
+    Eligible --> Student
+    Ineligible --> Student
+
+    Note["Drive analytics separately combines fixed-criteria results with a selected JD evidence source to form Eligible, Partial Match, and Not Eligible cohorts. That classification does not replace this official evaluator."]:::note
+    Evaluate -.-> Note

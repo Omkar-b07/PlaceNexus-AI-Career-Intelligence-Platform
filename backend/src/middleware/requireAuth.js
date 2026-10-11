@@ -1,7 +1,7 @@
 import { getSessionUser } from '../services/authService.js';
 
 function missingSessionError() {
-  const error = new Error('Please sign in to use PlaceNexus.');
+  const error = new Error('Please sign in to use PlaceX.');
   error.statusCode = 401;
   error.code = 'AUTHENTICATION_REQUIRED';
   return error;

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { findOrCreateApplication } from '../src/services/applicationService.js';
-import { isValidApplicationUrl, jobSourceTypes, normalizeOnCampusJob, publicJob, safeApplicationUrl } from '../src/services/jobService.js';
+import { isValidApplicationUrl, jobSourceTypes, normalizeOnCampusJob, publicJob, safeApplicationUrl, updateCampusJob } from '../src/services/jobService.js';
 import { normalizeExternalJob } from '../src/services/offCampusJobService.js';
 
 const job = { id: 'job-1', sourceType: jobSourceTypes.OFF_CAMPUS, applicationUrl: 'https://careers.example.com/jobs/1' };
@@ -75,6 +75,41 @@ test('allows incomplete drive data to be saved as a draft while retaining the ca
   assert.equal(draft.companyName, 'Organization');
   assert.equal(draft.jobDescription, 'Draft description');
   assert.equal(draft.role, undefined);
+});
+
+test('updates an archived campus drive by its canonical ID for TPO administration', async () => {
+  const archived = { _id: 'drive-1', companyName: 'Organization', sourceType: jobSourceTypes.ON_CAMPUS, jobStatus: 'ARCHIVED' };
+  const jobs = {
+    async findOneAndUpdate(filter, update, options) {
+      assert.deepEqual(filter, { _id: 'drive-1', sourceType: jobSourceTypes.ON_CAMPUS });
+      assert.equal(update.$set.role, 'Updated role');
+      assert.deepEqual(options, { returnDocument: 'after' });
+      return { ...archived, ...update.$set };
+    }
+  };
+
+  const updated = await updateCampusJob('drive-1', { role: 'Updated role' }, jobs);
+
+  assert.equal(updated?.id, 'drive-1');
+  assert.equal(updated?.role, 'Updated role');
+  assert.equal(updated?.jobStatus, 'ARCHIVED');
+});
+
+test('marks persisted JD analysis stale when a drive description changes without re-analysis', async () => {
+  const current = { _id: 'drive-jd-1', sourceType: jobSourceTypes.ON_CAMPUS, jobDescription: 'Original detailed job description for a campus opportunity.', jdAnalysisStatus: 'READY', jdAnalysis: { requiredSkills: ['React'] } };
+  const jobs = {
+    async findOneAndUpdate(_filter, update) {
+      assert.equal(update.$set.jobDescription, 'Changed detailed job description for the same campus opportunity.');
+      assert.equal(update.$set.jdAnalysisStatus, 'STALE');
+      assert.equal(update.$set.jdAnalysis, null);
+      assert.deepEqual(update.$set.requiredSkills, []);
+      return { ...current, ...update.$set };
+    }
+  };
+
+  const updated = await updateCampusJob('drive-jd-1', { jobDescription: 'Changed detailed job description for the same campus opportunity.' }, jobs);
+  assert.equal(updated?.jdAnalysisStatus, 'STALE');
+  assert.equal(updated?.jdAnalysis, null);
 });
 
 test('normalizes provider data with catalog-only inferred skills and no fabricated requirements', () => {

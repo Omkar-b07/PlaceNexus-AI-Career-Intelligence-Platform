@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   archiveCampusPlacementJob,
+  analyzeCampusJobDescription,
   closeCampusPlacementJob,
   createCampusPlacementJob,
   getCampusDriveAnalytics,
@@ -22,6 +23,7 @@ const router = Router();
 router.get('/on-campus', listOnCampusPlacementJobs);
 router.get('/off-campus', listOffCampusPlacementJobs);
 router.get('/manage/on-campus', requireAdmin, listManagedCampusJobs);
+router.post('/on-campus/analyze-jd', requireAdmin, analyzeCampusJobDescription);
 router.post('/on-campus', requireAdmin, createCampusPlacementJob);
 router.put('/on-campus/:jobId', requireAdmin, updateCampusPlacementJob);
 router.post('/on-campus/:jobId/publish', requireAdmin, publishCampusPlacementJob);

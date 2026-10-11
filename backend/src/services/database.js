@@ -1,6 +1,7 @@
 import { MongoClient } from 'mongodb';
 
 let databasePromise;
+let legacyResumeAssignmentsCollectionPromise;
 
 function configurationError(message) {
   const error = new Error(message);
@@ -122,5 +123,27 @@ export async function getNotificationsCollection() {
 
 export async function getInstantPlansCollection() {
   return (await connectDatabase()).collection('instant_plans');
+}
+
+/**
+ * Operational/audit records for explicitly TPO-assigned historical uploads.
+ * This never stores resume text and is separate from the canonical student
+ * profile resume object so a unique file reservation can prevent races.
+ */
+export async function getLegacyResumeAssignmentsCollection() {
+  if (!legacyResumeAssignmentsCollectionPromise) {
+    legacyResumeAssignmentsCollectionPromise = (async () => {
+      const collection = (await connectDatabase()).collection('legacy_resume_assignments');
+      await collection.createIndex(
+        { legacyResumeId: 1 },
+        { name: 'unique_legacy_resume_assignment', unique: true }
+      );
+      return collection;
+    })().catch((error) => {
+      legacyResumeAssignmentsCollectionPromise = undefined;
+      throw error;
+    });
+  }
+  return legacyResumeAssignmentsCollectionPromise;
 }
 

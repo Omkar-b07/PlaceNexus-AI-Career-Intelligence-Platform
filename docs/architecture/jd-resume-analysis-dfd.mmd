@@ -1,0 +1,67 @@
+%% PlaceX - Job Description and Resume Analysis Data Flow
+%% Profile skills and resume evidence are intentionally separate analytics sources.
+flowchart TB
+    classDef actor fill:#0f172a,color:#ffffff,stroke:#0f172a,stroke-width:1.5px
+    classDef process fill:#ede9fe,color:#4c1d95,stroke:#7c3aed,stroke-width:1.5px
+    classDef deterministic fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7,stroke-width:1.5px
+    classDef store fill:#ecfdf5,color:#065f46,stroke:#10b981,stroke-width:1.5px
+    classDef external fill:#fff7ed,color:#9a3412,stroke:#f97316,stroke-width:1.5px
+    classDef note fill:#f8fafc,color:#334155,stroke:#94a3b8,stroke-dasharray: 4 3
+
+    TPO([TPO / Admin]):::actor
+    Student([Student]):::actor
+    Gemini["Google Gemini"]:::external
+    Jobs[("jobs<br/>drive, jdAnalysis, jdAnalysisStatus")]:::store
+    Profiles[("student_profiles<br/>profile skills, resume metadata/text, resumeAnalysis")]:::store
+    ResumeFiles[("uploads/resumes<br/>private file bytes")]:::store
+    CareerHistory[("career_analyses<br/>individual Analyze Fit history")]:::store
+
+    subgraph JdPath["A. TPO analyzes a drive job description"]
+        direction LR
+        JdInput["TPO enters / changes JD"]:::process
+        JdExtract["JD analysis service<br/>strict extraction prompt"]:::process
+        JdValidate["Validate and normalize<br/>central skill catalogue; source hash"]:::deterministic
+        Review["TPO reviews requirements<br/>save drive / publish only when READY"]:::process
+        JdInput --> JdExtract --> Gemini --> JdValidate --> Review --> Jobs
+    end
+
+    subgraph ProfilePath["B. Profile Skills analytics source"]
+        direction LR
+        ProfileInput["Student maintains profile skills"]:::process
+        ProfileSkills["Profile skills evidence"]:::deterministic
+        Student --> ProfileInput --> Profiles --> ProfileSkills
+    end
+
+    subgraph ResumePath["C. Resume Analysis analytics source"]
+        direction LR
+        ResumeUpload["Student upload or explicit legacy reattachment"]:::process
+        Parse["Extract text<br/>PDF, DOCX, image/OCR"]:::process
+        ResumeExtract["Resume analysis service<br/>skill evidence extraction"]:::process
+        ResumeValidate["Normalize catalogue skills<br/>resume/source hash cache and status"]:::deterministic
+        ResumeUpload --> ResumeFiles --> Parse --> Profiles
+        Profiles --> ResumeExtract --> Gemini --> ResumeValidate --> Profiles
+    end
+
+    subgraph IndividualFit["D. Student Analyze Fit"]
+        direction LR
+        FitInput["Session resume text + pasted JD"]:::process
+        FitAnalysis["Career analysis<br/>deterministic score and optional Gemini recommendations"]:::process
+        Student --> FitInput --> FitAnalysis --> CareerHistory
+        FitAnalysis <--> Gemini
+    end
+
+    TPO -->|"request drive analytics<br/>analysisSource = profile or resume"| SourceSelect["Choose exactly one evidence source"]:::process
+    Jobs --> SourceSelect
+    ProfileSkills --> SourceSelect
+    ResumeValidate --> SourceSelect
+    ReadyCheck["For resume source: analyze only when<br/>drive JD is READY; unavailable states retained"]:::note
+    Jobs -.-> ReadyCheck
+    ReadyCheck -.-> SourceSelect
+
+    SourceSelect --> Matcher["Deterministic JD matcher<br/>required skills 80%; preferred skills 20%"]:::deterministic
+    Matcher --> Result["Drive role-fit output<br/>matched and missing skills; coverage;<br/>Eligible / Partial Match / Not Eligible cohorts"]:::process
+    Result --> TPO
+
+    Separation["No profile-skill + resume-skill merge.<br/>Gemini does not perform cohort matching."]:::note
+    ProfileSkills -.-> Separation
+    ResumeValidate -.-> Separation
